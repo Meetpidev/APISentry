@@ -23,7 +23,7 @@ app.use("/api", apiRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-app.listen(PORT, async () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`APISentry backend running on http://localhost:${PORT}`);
   try {
     await testConnection();
