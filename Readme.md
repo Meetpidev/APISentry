@@ -76,3 +76,39 @@ calls the real GitHub REST API.
 ---
 
 ## Architecture
+
+APISentry is composed of three layers: detection, classification, and remediation — backed by AWS for deployment, storage, and secrets management.
+
+### Detection Layer
+
+Change signals can come from two sources, in order of reliability:
+
+- **Manual scan text** — a user pastes or triggers a scan with raw changelog text directly.
+- **Docs page diff** — a real headless browser snapshots a provider's documentation page (so client-side-rendered docs are actually seen), diffs it against the last snapshot, and filters out timestamp, pagination, and cookie-banner noise before comparing. This is the fallback of last resort, and works even when a provider publishes no changelog at all.
+
+### Classification Layer
+
+Once change text is detected, it's classified using one of two methods:
+
+- **Gemini (if `GEMINI_API_KEY` is set)** — reads the text for actual meaning, so prose like "we simplified the auth flow" can be correctly flagged as breaking even with no explicit trigger words.
+- **Heuristic keyword matching (always available, no key required)** — a zero-dependency fallback that looks for vocabulary like "breaking change," "deprecated," or "no longer."
+
+Every detected change records which source found it and which method classified it, so it's always clear whether an entry is a high-confidence AI read or a keyword-matched guess.
+
+### Remediation Engine
+
+Once a change is detected and a user chooses to act on it, APISentry:
+
+1. Clones the real linked GitHub repository at the selected branch.
+2. Applies a fix using one of two modes:
+   - **AI mode** — sends each affected file's current content to Gemini along with the change description, and only writes back files Gemini determines actually need editing (minimal, targeted diffs, not a full rewrite).
+   - **Manual mode** — applies find/replace rules (plain string or regex) supplied by the user, for full control.
+3. Commits with a real `git commit`, and either pushes to a new branch and opens a real GitHub pull request, or commits directly to an existing branch.
+
+Nothing here is simulated — it shells out to the real `git` binary and calls the real GitHub REST API.
+
+### AWS Infrastructure
+
+- **Deployment** — the application runs on AWS infrastructure end-to-end.
+- **S3** — used for storage, persisting docs snapshots, diff history, and change records so the system retains memory across scans.
+- **Secrets Manager** — securely holds API keys and tokens (e.g., the Gemini key and GitHub credentials), keeping credentials out of the codebase.
